@@ -273,7 +273,7 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
                     }
                     pendingNewline = msg.charAt(msg.length() - 1) == '\r';
                 }
-                spn.append(TextUtil.toCaretString(msg, newline.length() != 0));
+                spn.append(TextUtil.toCaretString(msg, newline.length() != 0) + "\n");
             }
         }
         receiveText.append(spn);

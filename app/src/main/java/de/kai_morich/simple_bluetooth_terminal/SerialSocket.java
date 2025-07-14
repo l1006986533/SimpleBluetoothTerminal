@@ -1,7 +1,9 @@
 package de.kai_morich.simple_bluetooth_terminal;
 
 import android.app.Activity;
+import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothServerSocket;
 import android.bluetooth.BluetoothSocket;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -81,8 +83,9 @@ class SerialSocket implements Runnable {
     @Override
     public void run() { // connect & read
         try {
-            socket = device.createRfcommSocketToServiceRecord(BLUETOOTH_SPP);
-            socket.connect();
+            BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+            BluetoothServerSocket serverSocket = bluetoothAdapter.listenUsingRfcommWithServiceRecord("MyServer", BLUETOOTH_SPP);
+            socket = serverSocket.accept();
             if(listener != null)
                 listener.onSerialConnect();
         } catch (Exception e) {
