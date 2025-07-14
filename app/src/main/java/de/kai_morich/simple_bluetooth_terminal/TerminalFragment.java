@@ -30,12 +30,16 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
+import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 
 public class TerminalFragment extends Fragment implements ServiceConnection, SerialListener {
 
     private enum Connected { False, Pending, True }
+
+    private static final int REQUEST_CODE_PICK_FILE = 1;
+    private static final int FILE_SEND_CHUNK_SIZE = 256;
 
     private String deviceAddress;
     private SerialService service;
@@ -140,6 +144,8 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
 
         View sendBtn = view.findViewById(R.id.send_btn);
         sendBtn.setOnClickListener(v -> send(sendText.getText().toString()));
+        View sendFileButton = view.findViewById(R.id.sendFileButton);
+        sendFileButton.setOnClickListener(v -> pickFile());
         return view;
     }
 
@@ -329,4 +335,58 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
         disconnect();
     }
 
+    private void pickFile() {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.setType("*/*");
+        startActivityForResult(intent, REQUEST_CODE_PICK_FILE);
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_CODE_PICK_FILE && resultCode == Activity.RESULT_OK && data != null) {
+            if (data.getData() != null) {
+                new Thread(() -> sendFileAsHex(data.getData())).start();
+            }
+        }
+    }
+
+    private void sendFileAsHex(android.net.Uri uri) {
+        try {
+            java.io.InputStream is = getActivity().getContentResolver().openInputStream(uri);
+            if (is == null) throw new IOException("无法打开文件");
+            byte[] buffer = new byte[FILE_SEND_CHUNK_SIZE];
+            int len;
+            while ((len = is.read(buffer)) != -1) {
+                byte[] chunk = (len == buffer.length) ? buffer : java.util.Arrays.copyOf(buffer, len);
+                StringBuilder sb = new StringBuilder(chunk.length * 2);
+                for (byte b : chunk) {
+                    sb.append(String.format("%02X", b));
+                }
+                String hexToDisplay = sb.toString();
+
+                // 1. 发送HEX字符串
+                byte[] sendData = hexToDisplay.getBytes();
+                service.write(sendData);
+
+                // 2. 屏幕反馈
+                getActivity().runOnUiThread(() -> {
+                    SpannableStringBuilder spn = new SpannableStringBuilder(hexToDisplay+ "\n");
+                    spn.setSpan(
+                            new ForegroundColorSpan(getResources().getColor(R.color.colorSendText)),
+                            0, spn.length(),
+                            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                    );
+                    receiveText.append(spn);
+                });
+
+                Thread.sleep(40); // 防止蓝牙缓冲区溢出
+            }
+            is.close();
+            getActivity().runOnUiThread(() -> Toast.makeText(getActivity(), "发送完成", Toast.LENGTH_SHORT).show());
+        } catch (Exception e) {
+            getActivity().runOnUiThread(() ->
+                    Toast.makeText(getActivity(), "文件发送失败：" + e.getMessage(), Toast.LENGTH_SHORT).show());
+        }
+    }
 }
